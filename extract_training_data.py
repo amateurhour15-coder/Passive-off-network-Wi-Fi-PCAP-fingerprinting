@@ -178,10 +178,11 @@ def extract_training_data(pcap_path, min_frames=5, output_file=None, append=Fals
     for i, (wps_key, device) in enumerate(valid_devices.items(), 1):
         device_name = device.get_device_name()
         device_entry = device.to_training_entry()
+        mac_list = list(device.mac_addresses)
         print(f"\nDevice #{i}: {device_name}")
         print(f"  Type: {device_entry['device_type']}")
-        print(f"  MACs: {', '.join(device.mac_addresses[:5])}" + 
-              (f" ... ({len(device.mac_addresses)} total)" if len(device.mac_addresses) > 5 else ""))
+        print(f"  MACs: {', '.join(mac_list[:5])}" + 
+              (f" ... ({len(mac_list)} total)" if len(mac_list) > 5 else ""))
         print(f"  Roles: {', '.join(device.network_roles)}")
         print(f"  Frames: {device.total_frames}")
         print(f"  Unique fingerprints: {len(device.fingerprints)}")
