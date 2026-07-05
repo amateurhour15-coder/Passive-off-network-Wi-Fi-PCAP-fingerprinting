@@ -109,7 +109,6 @@ def playback_and_classify(pcap_path, working_db, threshold_pct, quiet_mode):
                 
                 if not quiet_mode:
                     timing_flag = f" [IFS: {ifs:.2f}s]" if 0 < ifs < 5 else ""
-                    # CORRECTED ALIGNMENT STRINGS BELOW
                     print(f"{mac:<18} | {role:<13} | {context['mac_type']:<12} | {dev_identity+timing_flag:<43} | {context['signal_strength']} dBm")
 
     print_metrics_summary(metrics, device_roster)
