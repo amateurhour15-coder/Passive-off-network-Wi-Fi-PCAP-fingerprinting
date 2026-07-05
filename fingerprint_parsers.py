@@ -36,7 +36,7 @@ def parse_wps_attributes(info_payload):
     if len(info_payload) < 4:
         return None
     oui = info_payload[:3].hex().upper()
-    oui_type = info_payload[3]
+    oui_type = info_payload
     
     if oui == "0050F2" and oui_type == 4:
         wps_data = info_payload[4:]
@@ -68,8 +68,7 @@ def generate_fingerprint_string(packet):
     dot11_layer = packet.getlayer(Dot11)
     subtype = dot11_layer.subtype
     
-    # 1. Determine Network Role via Management Subtypes
-    # Subtype 0 = Beacon, Subtype 4 = Probe Request, Subtype 5 = Probe Response
+    # Determine Network Role via Management Subtypes
     if subtype == 4:
         frame_role = "Client-Probe"
     elif subtype == 0:
@@ -80,7 +79,6 @@ def generate_fingerprint_string(packet):
         return None  # Bypass all other management/data/control traffic
 
     # Evaluate the Capability Information bitfield to identify Ad-Hoc networks
-    # Bit 0 = ESS (Infrastructure AP), Bit 1 = IBSS (Ad-Hoc Peer Node)
     if (packet.haslayer(Dot11Beacon) or packet.haslayer(Dot11ProbeResp)) and hasattr(packet, 'cap'):
         if packet.cap & 0x0002:
             frame_role = "AdHoc-Peer"
