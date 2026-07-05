@@ -12,12 +12,18 @@ def train_model(pcap_path, device_type, make, model_number, working_db):
     """Processes a single training capture file and maps its counts to memory."""
     print(f"[*] Training: Processing '{pcap_path}'...")
     new_sigs, updated_sigs = 0, 0
+    debug_count = 0
     
     with PcapReader(pcap_path) as pcap_file:
         for packet in pcap_file:
             result = generate_fingerprint_string(packet)
             if result:
                 fp_hash, context = result
+                debug_count += 1
+                
+                if debug_count <= 3:  # Print first 3 fingerprints for debugging
+                    print(f"[DEBUG] Fingerprint #{debug_count}: {fp_hash[:80]}...")
+                    print(f"[DEBUG] MAC: {context['mac_address']}, Role: {context['network_role']}, WPS: {context['wps']}")
                 
                 if fp_hash not in working_db:
                     working_db[fp_hash] = {
@@ -33,8 +39,11 @@ def train_model(pcap_path, device_type, make, model_number, working_db):
                     model_dict[model_number] = model_dict.get(model_number, 0) + 1
                     updated_sigs += 1
                 
-                if context["wps"] and context["wps"] not in working_db[fp_hash]["wps_fingerprints"]:
-                    working_db[fp_hash]["wps_fingerprints"].append(context["wps"])
+                if context["wps"]:
+                    # Convert WPS dict to hashable string for storage
+                    wps_str = str(context["wps"])
+                    if wps_str not in working_db[fp_hash]["wps_fingerprints"]:
+                        working_db[fp_hash]["wps_fingerprints"].append(wps_str)
                     
     print(f"[+] Complete '{os.path.basename(pcap_path)}': Added {new_sigs} rules. Incremented {updated_sigs} matrix variants.")
     return working_db
@@ -107,6 +116,8 @@ def playback_and_classify(pcap_path, working_db, threshold_pct, quiet_mode):
         "unique_macs": set()
     }
     
+    debug_count = 0
+    
     device_roster = {}
     last_timestamp = None
     
@@ -117,6 +128,11 @@ def playback_and_classify(pcap_path, working_db, threshold_pct, quiet_mode):
                 fp_hash, context = result
                 mac = context.get("mac_address", "Unknown")
                 role = context["network_role"]
+                
+                debug_count += 1
+                if debug_count <= 3:  # Print first 3 fingerprints for debugging
+                    print(f"[DEBUG PLAY] Fingerprint #{debug_count}: {fp_hash[:80]}...")
+                    print(f"[DEBUG PLAY] MAC: {mac}, Role: {role}, In DB: {fp_hash in working_db}")
                 
                 metrics["total_processed"] += 1
                 metrics["unique_macs"].add(mac)
@@ -133,11 +149,16 @@ def playback_and_classify(pcap_path, working_db, threshold_pct, quiet_mode):
                     db_entry = working_db[fp_hash]
                     
                     # Check for WPS match (definitive)
-                    if context["wps"] and context["wps"] in db_entry["wps_fingerprints"]:
-                        dev_identity = f"HW Match: {db_entry['make']} {db_entry['device_type']}"
-                        metrics["definitive_matches"] += 1
-                    else:
-                        # Check probabilistic match
+                    wps_matched = False
+                    if context["wps"]:
+                        wps_str = str(context["wps"])
+                        if wps_str in db_entry["wps_fingerprints"]:
+                            dev_identity = f"HW Match: {db_entry['make']} {db_entry['device_type']}"
+                            metrics["definitive_matches"] += 1
+                            wps_matched = True
+                    
+                    # If no WPS match, check probabilistic match
+                    if not wps_matched:
                         distribution = calculate_probability_string(db_entry["model_samples"], threshold_pct)
                         if distribution:
                             dev_identity = f"Probabilistic: {db_entry['make']} {distribution}"
