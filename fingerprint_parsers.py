@@ -1,17 +1,17 @@
 import sys
-from scapy.all import Dot11, Dot11ProbeReq, Dot11Elt
+from scapy.all import Dot11, Dot11Beacon, Dot11ProbeResp, Dot11ProbeReq, Dot11Elt
 
 # ==============================================================================
 # EMBEDDED PORTABLE DATABASE
-# Default built-in fallback rules. 
+# Default multi-role fallback signatures.
 # ==============================================================================
 PORTABLE_KNOWLEDGE_BASE = {
     "IE:[0-1-45-127-191-221]_HT:[2D04]_VHT:[FF010400]_VENDOR_FLAGS:[0017F2010203]": {
+        "network_role": "Client-Probe",
         "device_type": "Smartphone",
         "make": "Apple",
         "model_samples": {
-            "iPhone 14": 150,
-            "iPhone 15": 350
+            "iPhone 15": 850
         },
         "wps_fingerprints": []
     }
@@ -22,7 +22,7 @@ COMMON_MAC_OUIS = {
     "001A11": "Google", "3C5C24": "Google",
     "001599": "Samsung", "8421EE": "Samsung",
     "002682": "Intel", "A4434D": "Intel",
-    "0050F2": "Microsoft"
+    "0050F2": "Microsoft", "000C43": "Ralink/MediaTek"
 }
 
 def is_mac_randomized(mac_string):
@@ -61,12 +61,34 @@ def parse_wps_attributes(info_payload):
     return None
 
 def generate_fingerprint_string(packet):
-    """Extracts structural signatures, deep vendor flags, MAC status, and timing contextual clues."""
-    if not packet.haslayer(Dot11ProbeReq):
+    """Extracts structural signatures from Client Probes, AP Beacons, and Responses."""
+    if not packet.haslayer(Dot11):
         return None
+        
     dot11_layer = packet.getlayer(Dot11)
-    mac_address = dot11_layer.addr2
+    subtype = dot11_layer.subtype
     
+    # 1. Determine Network Role via Management Subtypes
+    # Subtype 0 = Beacon, Subtype 4 = Probe Request, Subtype 5 = Probe Response
+    if subtype == 4:
+        frame_role = "Client-Probe"
+    elif subtype == 0:
+        frame_role = "AP-Beacon"
+    elif subtype == 5:
+        frame_role = "AP-Response"
+    else:
+        return None  # Bypass all other management/data/control traffic
+
+    # Evaluate the Capability Information bitfield to identify Ad-Hoc networks
+    # Bit 0 = ESS (Infrastructure AP), Bit 1 = IBSS (Ad-Hoc Peer Node)
+    if (packet.haslayer(Dot11Beacon) or packet.haslayer(Dot11ProbeResp)) and hasattr(packet, 'cap'):
+        if packet.cap & 0x0002:
+            frame_role = "AdHoc-Peer"
+
+    mac_address = dot11_layer.addr2  # Transmitter address
+    if not mac_address:
+        return None
+
     mac_type = "Randomized" if is_mac_randomized(mac_address) else "Valid/Hardware"
     mac_oui = mac_address.replace(":", "")[:6].upper()
     hardware_make = COMMON_MAC_OUIS.get(mac_oui, "Unknown Manufacturer") if mac_type == "Valid/Hardware" else "N/A (Randomised)"
@@ -83,7 +105,8 @@ def generate_fingerprint_string(packet):
         if elt.ID == 221 and len(elt.info) >= 3:
             vendor_raw_payloads.append(elt.info.hex().upper())
             wps_info = parse_wps_attributes(elt.info)
-            if wps_info: wps_extracted.update(wps_info)
+            if wps_info: 
+                wps_extracted.update(wps_info)
         elif elt.ID == 45:
             ht_caps = elt.info[:2].hex().upper()
         elif elt.ID == 191:
@@ -93,10 +116,12 @@ def generate_fingerprint_string(packet):
     ie_sequence = "-".join(ie_tags)
     vendor_payload_hash = "|".join(sorted(set(vendor_raw_payloads))) if vendor_raw_payloads else "NONE"
     
+    # Unified hash string including the hardware signature layout
     fingerprint_hash = f"IE:[{ie_sequence}]_HT:[{ht_caps}]_VHT:[{vht_caps}]_VENDOR_FLAGS:[{vendor_payload_hash[:32]}]"
     
     context_data = {
         "mac_address": mac_address, "mac_type": mac_type, "hardware_make": hardware_make,
-        "timestamp": packet_time, "signal_strength": signal_strength, "wps": wps_extracted
+        "timestamp": packet_time, "signal_strength": signal_strength, "wps": wps_extracted,
+        "network_role": frame_role
     }
     return fingerprint_hash, context_data
