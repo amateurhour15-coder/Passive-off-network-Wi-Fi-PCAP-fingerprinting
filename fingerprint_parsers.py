@@ -29,14 +29,15 @@ def is_mac_randomized(mac_string):
     """Checks the local/global bit in the second hex character of the MAC address."""
     if not mac_string or len(mac_string) < 17:
         return True
-    return mac_string.upper() in ['2', '6', 'A', 'E']
+    second_char = mac_string[1].upper()
+    return second_char in ['2', '6', 'A', 'E']
 
 def parse_wps_attributes(info_payload):
     """Parses IE 221 Vendor Specific payload looking for WPS Data Elements (OUI 0050F204)."""
     if len(info_payload) < 4:
         return None
     oui = info_payload[:3].hex().upper()
-    oui_type = info_payload
+    oui_type = info_payload[3] if len(info_payload) > 3 else 0
     
     if oui == "0050F2" and oui_type == 4:
         wps_data = info_payload[4:]
@@ -122,4 +123,4 @@ def generate_fingerprint_string(packet):
         "timestamp": packet_time, "signal_strength": signal_strength, "wps": wps_extracted,
         "network_role": frame_role
     }
-    return fingerprint_hash, context_data
+    return fingerprint_hash, context_data 
