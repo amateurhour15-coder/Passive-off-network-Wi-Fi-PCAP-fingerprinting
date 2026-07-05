@@ -94,7 +94,7 @@ def playback_and_classify(pcap_path, working_db, threshold_pct, quiet_mode):
     """Streams a file line by line to calculate classification metrics and resolve tie-breakers."""
     if not quiet_mode:
         print(f"\n[*] Playback Stream: Classifying with Probability Matrices (Threshold: {threshold_pct}%)")
-        print(f"{'MAC ADDRESS': {distribution})"
+        print(f"{'MAC ADDRESS': {distribution}}")
                             metrics["probabilistic_matches"] += 1
                         else:
                             dev_identity = "Low Confidence Classification (Filtered)"
