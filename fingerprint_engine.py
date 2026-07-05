@@ -5,7 +5,7 @@ import argparse
 import glob
 from scapy.all import PcapReader
 
-# Import the core structural decoder variables and functions from Part 1
+# Import the core engine layers from Part 1 module
 from fingerprint_parsers import generate_fingerprint_string, PORTABLE_KNOWLEDGE_BASE
 
 def train_model(pcap_path, device_type, make, model_number, working_db):
@@ -21,6 +21,7 @@ def train_model(pcap_path, device_type, make, model_number, working_db):
                 
                 if fp_hash not in working_db:
                     working_db[fp_hash] = {
+                        "network_role": context["network_role"],
                         "device_type": device_type,
                         "make": make,
                         "model_samples": {model_number: 1},
@@ -58,17 +59,17 @@ def print_metrics_summary(metrics, device_roster):
     """Outputs analytical summaries and distinct MAC address registers."""
     total = metrics["total_processed"]
     if total == 0:
-        print("\n[!] Metrics Error: No probe request frames were processed during this session.")
+        print("\n[!] Metrics Error: No probe/beacon frames were processed during this session.")
         return
 
-    print("\n" + "="*80)
+    print("\n" + "="*90)
     print("                     CAPTURED UNIQUE DEVICE ROSTER BREAKDOWN                 ")
-    print("="*80)
-    print(f" {'MAC ADDRESS':<18} | {'MAC SYSTEM':<12} | {'RESOLVED IDENTITY MATRIX / PROFILE':<43}")
-    print("-" * 80)
+    print("="*90)
+    print(f" {'MAC ADDRESS':<18} | {'ROLE':<13} | {'MAC SYSTEM':<12} | {'RESOLVED IDENTITY MATRIX / PROFILE':<35}")
+    print("-" * 90)
     for mac, info in sorted(device_roster.items()):
-        print(f" {mac:<18} | {info['mac_type']:<12} | {info['identity']:<43}")
-    print("="*80)
+        print(f" {mac:<18} | {info['role']:<13} | {info['mac_type']:<12} | {info['identity']:<35}")
+    print("="*90)
 
     definitive_pct = (metrics["definitive_matches"] / total) * 100
     probabilistic_pct = (metrics["probabilistic_matches"] / total) * 100
@@ -76,19 +77,19 @@ def print_metrics_summary(metrics, device_roster):
     unknown_pct = (metrics["unknown_signatures"] / total) * 100
     success_rate = ((metrics["definitive_matches"] + metrics["probabilistic_matches"]) / total) * 100
 
-    print("\n" + "="*80)
+    print("\n" + "="*90)
     print("                 PASSIVE FRAME CLASSIFICATION PERFORMANCE METRICS             ")
-    print("="*80)
-    print(f" Total Probe Requests Processed : {total:<5}")
-    print(f" Total Unique MACs Documented  : {len(metrics['unique_macs']):<5}")
-    print("-" * 80)
+    print("="*90)
+    print(f" Total Radio Frames Processed : {total:<5}")
+    print(f" Total Unique MACs Documented : {len(metrics['unique_macs']):<5}")
+    print("-" * 90)
     print(f" 🎯 Definitive Hardware Matches  : {metrics['definitive_matches']:<5} ({definitive_pct:.1f}%) [WPS/OUI Verified]")
     print(f" 📊 Probabilistic Model Matches : {metrics['probabilistic_matches']:<5} ({probabilistic_pct:.1f}%) [Matrix Resolved]")
     print(f" 🛑 Low Confidence (Filtered)   : {metrics['filtered_matches']:<5} ({filtered_pct:.1f}%) [Below Threshold]")
     print(f" ❓ Completely Untrained Sigs   : {metrics['unknown_signatures']:<5} ({unknown_pct:.1f}%) [No DB Entry]")
-    print("-" * 80)
+    print("-" * 90)
     print(f" OVERALL CAPTURE CLASSIFICATION SUCCESS RATE : {success_rate:.2f}%")
-    print("="*80 + "\n")
+    print("="*90 + "\n")
 def playback_and_classify(pcap_path, working_db, threshold_pct, quiet_mode):
     """Streams a file line by line to calculate classification metrics and resolve tie-breakers."""
     if not quiet_mode:
@@ -102,22 +103,22 @@ def playback_and_classify(pcap_path, working_db, threshold_pct, quiet_mode):
                     metrics["unknown_signatures"] += 1
                 
                 if mac not in device_roster or device_roster[mac]["identity"] == "Unknown Device Signature":
-                    device_roster[mac] = {"mac_type": context["mac_type"], "identity": dev_identity}
+                    device_roster[mac] = {"role": role, "mac_type": context["mac_type"], "identity": dev_identity}
                 elif "WPS" in dev_identity or "HW Match" in dev_identity:
                     device_roster[mac]["identity"] = dev_identity
                 
                 if not quiet_mode:
                     timing_flag = f" [IFS: {ifs:.2f}s]" if 0 < ifs < 5 else ""
-                    print(f"{mac:<18} | {context['mac_type']:<12} | {context['hardware_make']:<15} | {dev_identity+timing_flag:<48} | {context['signal_strength']} dBm")
+                    print(f"{mac:<18} | {role:<13} | {context['mac_type']:<12} | {dev_identity+timing_flag:<43} | {context['signal_strength']} dBm")
 
     print_metrics_summary(metrics, device_roster)
 
 def main():
-    parser = argparse.ArgumentParser(description="Probabilistic Context-Aware Wi-Fi Fingerprint Engine")
+    parser = argparse.ArgumentParser(description="Multi-Role Probabilistic Wi-Fi Fingerprint Engine")
     parser.add_argument("--train", nargs="+", help="Path to one or more training PCAP files (supports wildcards).")
-    parser.add_argument("--type", help="General device category (e.g., 'Smartphone').")
-    parser.add_argument("--make", help="Device manufacturer (e.g., 'Apple').")
-    parser.add_argument("--model", help="Specific model designation string (e.g., 'iPhone 15').")
+    parser.add_argument("--type", help="General device category (e.g., 'Smartphone', 'Access-Point').")
+    parser.add_argument("--make", help="Device manufacturer (e.g., 'Apple', 'Cisco').")
+    parser.add_argument("--model", help="Specific model designation string (e.g., 'iPhone 15', 'Catalyst-9120').")
     parser.add_argument("--play", help="Path to target PCAP file for classification.")
     parser.add_argument("--db-import", help="Load external database file.")
     parser.add_argument("--db-export", help="Save current database to external file.")
