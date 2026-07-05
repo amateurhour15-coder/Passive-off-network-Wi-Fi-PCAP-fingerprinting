@@ -69,19 +69,34 @@ class DeviceGroup:
         }
 
 
-def extract_training_data(pcap_path, min_frames=5, output_file=None):
+def extract_training_data(pcap_path, min_frames=5, output_file=None, append=False):
     """Extract training data from PCAP using WPS-based device grouping.
     
     Args:
         pcap_path: Path to PCAP file
         min_frames: Minimum frames required to include a device
         output_file: Output JSON file path
+        append: If True, append to existing file instead of overwriting
     
     Returns:
         Dictionary of training data
     """
     print(f"[*] Extracting training data from: {pcap_path}")
     print(f"[*] Minimum frames per device: {min_frames}")
+    
+    # Load existing database if appending
+    existing_db = {}
+    existing_devices = []
+    if append and output_file and os.path.exists(output_file):
+        try:
+            with open(output_file, 'r') as f:
+                existing_data = json.load(f)
+                existing_db = existing_data.get("training_database", {})
+                existing_devices = existing_data.get("devices", [])
+            print(f"[+] Loaded existing database with {len(existing_db)} entries")
+        except Exception as e:
+            print(f"[-] Warning: Could not load existing file: {e}")
+            print("[*] Creating new database")
     
     # Group devices by WPS signature
     devices_by_wps = {}
@@ -136,13 +151,28 @@ def extract_training_data(pcap_path, min_frames=5, output_file=None):
     print(f"    Devices meeting minimum frame threshold: {len(valid_devices)}")
     
     # Build training database
-    training_db = {}
-    device_summary = []
+    training_db = dict(existing_db)  # Start with existing data if appending
+    device_summary = list(existing_devices)  # Start with existing devices
     
     for wps_key, device in valid_devices.items():
         device_name = device.get_device_name()
         device_entry = device.to_training_entry()
-        device_summary.append(device_entry)
+        
+        # Check if device already exists
+        device_exists = False
+        for existing_device in device_summary:
+            if (existing_device['make'] == device.wps_make and 
+                existing_device.get('model_number') == device.wps_model_num):
+                # Merge with existing device
+                existing_device['mac_addresses'].extend(device.mac_addresses)
+                existing_device['network_roles'].update(device.network_roles)
+                existing_device['total_frames'] += device.total_frames
+                existing_device['unique_fingerprints'] += device.unique_fingerprints
+                device_exists = True
+                break
+        
+        if not device_exists:
+            device_summary.append(device_entry)
         
         # Add each fingerprint to training database
         for fp_hash, count in device.fingerprints.items():
@@ -156,7 +186,10 @@ def extract_training_data(pcap_path, min_frames=5, output_file=None):
                 }
             else:
                 # Update existing entry
-                training_db[fp_hash]["model_samples"][device_name] = count
+                if device_name in training_db[fp_hash]["model_samples"]:
+                    training_db[fp_hash]["model_samples"][device_name] += count
+                else:
+                    training_db[fp_hash]["model_samples"][device_name] = count
     
     # Print device summary
     print("\n" + "="*80)
@@ -185,8 +218,9 @@ def extract_training_data(pcap_path, min_frames=5, output_file=None):
                 "source_pcap": os.path.basename(pcap_path),
                 "total_frames": total_frames,
                 "wps_frames": wps_frames,
-                "devices_identified": len(valid_devices),
-                "min_frames_threshold": min_frames
+                "devices_identified": len(device_summary),
+                "min_frames_threshold": min_frames,
+                "appended": append
             },
             "devices": device_summary,
             "training_database": training_db
@@ -195,8 +229,10 @@ def extract_training_data(pcap_path, min_frames=5, output_file=None):
         with open(output_file, 'w') as f:
             json.dump(output_data, f, indent=2)
         
-        print(f"\n[+] Training data saved to: {output_file}")
-        print(f"    Database entries: {len(training_db)}")
+        action = "Appended to" if append else "Saved to"
+        print(f"\n[+] Training data {action}: {output_file}")
+        print(f"    Total database entries: {len(training_db)}")
+        print(f"    Total devices: {len(device_summary)}")
     
     return output_data
 
@@ -206,9 +242,12 @@ def main():
         description="Extract training data from multi-device PCAP files using WPS identification"
     )
     parser.add_argument("pcap", help="Path to PCAP file")
-    parser.add_argument("-o", "--output", help="Output JSON file path")
+    parser.add_argument("-o", "--output", default="trained_db.json", 
+                       help="Output JSON file path (default: trained_db.json)")
     parser.add_argument("--min-frames", type=int, default=5,
                        help="Minimum frames per device to include (default: 5)")
+    parser.add_argument("--append", action="store_true",
+                       help="Append to existing trained_db.json instead of overwriting")
     
     args = parser.parse_args()
     
@@ -216,12 +255,7 @@ def main():
         print(f"[-] Error: PCAP file not found: {args.pcap}")
         sys.exit(1)
     
-    if not args.output:
-        # Generate default output filename
-        base_name = os.path.splitext(os.path.basename(args.pcap))[0]
-        args.output = f"{base_name}_training_data.json"
-    
-    extract_training_data(args.pcap, args.min_frames, args.output)
+    extract_training_data(args.pcap, args.min_frames, args.output, args.append)
 
 
 if __name__ == "__main__":
