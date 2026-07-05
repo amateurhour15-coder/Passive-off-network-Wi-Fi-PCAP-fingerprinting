@@ -1,12 +1,13 @@
-# Passive Off-Network Wi-Fi PCAP Fingerprint Engine
+# Multi-Role Passive Wi-Fi PCAP Fingerprint Engine
 
-A modular, high-performance Python framework engineered for **Ubuntu 24.04** to passively fingerprint, identify, and audit Wi-Fi hardware assets entirely from raw packet capture files (`.pcap`).
+A modular, high-performance Python framework engineered for **Ubuntu 24.04** to passively fingerprint, identify, and audit wireless assets entirely from raw packet capture files (`.pcap`).
 
-By evaluating unencrypted 802.11 Management frames (Probe Requests), this system isolates static layer-2 physical parameters—such as **Information Element (IE) sequences**, **High Throughput (HT) capabilities**, and **Very High Throughput (VHT) capabilities**—to identify specific device manufacturers, types, and models. This multi-layered tracking approach remains highly effective even when devices actively rotate their MAC addresses via aggressive randomisation schemas.
+By evaluating unencrypted 802.11 Management frames (Probe Requests, Beacons, and Probe Responses), this system isolates static layer-2 physical parameters—such as **Information Element (IE) sequences**, **High Throughput (HT) capabilities**, and **Very High Throughput (VHT) capabilities**—to identify specific device manufacturers, types, and models. This multi-layered tracking approach remains highly effective even when devices actively rotate their MAC addresses via aggressive randomisation schemas.
 
 ---
 
 ## 🚀 Key Capabilities
+- **Multi-Role Infrastructure Auditing:** Captures and classifies Client Devices (`Client-Probe`), Enterprise Access Points (`AP-Beacon`/`AP-Response`), Range Extenders, and Peer Mesh Networks (`AdHoc-Peer`).
 - **Cross-Layer Fingerprinting:** Parses IE field sequences, HT/VHT silicon parameters, and proprietary vendor identifiers.
 - **Split System Architecture:** Clean operational separation of concerns across a processing parse module and a command-line interface execution layer.
 - **Multi-Model Tracking Framework:** Seamlessly aggregates and links multiple distinct device models from a single manufacturer to a matching hardware footprint matrix over time.
@@ -27,7 +28,10 @@ Maintain both files inside the same operational working directory to preserve de
 ```
 
 *   **`fingerprint_parsers.py`**: Handles raw bit manipulation, isolates randomized MAC variants from valid hardware burned-in addresses, parses plain-text attributes, and hashes internal vendor flags to break chipset identity ties.
-*   
+*   **`fingerprint_engine.py`**: Functions as the user-facing execution core, managing command-line inputs, running training datasets, and simulating streams for live classification.
+
+---
+
 ## 🛠 Prerequisites & Installation (Ubuntu 24.04)
 
 Ensure your system packages are updated and install the required wireless utilities and Python library dependencies:
@@ -62,9 +66,6 @@ To capture raw off-network probe requests natively on Ubuntu 24.04, put your wir
    # Verify 'type monitor' is now active
    iw dev
    ```
-
----
-
 ## 🚀 Usage Guide
 
 ### 1. Simple Playback Classification (Built-in DB)
@@ -84,17 +85,18 @@ python3 fingerprint_engine.py \
   --db-export field_signatures.json
 ```
 
-### 3. Appending Multi-Model Variants Over Time
-If a newer device uses the same internal wireless chipset configuration, train it again with the same `--type` and `--make` but a different `--model` name. The script automatically appends the model to the existing signature array:
+### 3. Appending Multi-Model Variants / Bulk Multi-File Wildcards Over Time
+If a newer device uses the same internal wireless chipset configuration, or if you have multiple clean-room files to ingest at once, run the training command with folder wildcards. The script automatically resolves and appends the entries natively:
 ```bash
 python3 fingerprint_engine.py \
   --db-import field_signatures.json \
-  --train sample_iphone15.pcap \
+  --train captured_samples/*.pcap \
   --type "Smartphone" \
   --make "Apple" \
   --model "iPhone 15" \
   --db-export field_signatures.json
 ```
+
 ### 4. Running Playback with an External Database
 Execute traffic analysis across your accumulated or transported ruleset matrix:
 ```bash
@@ -155,38 +157,36 @@ Once a `.pcap` analysis processing phase completes, the console outputs two dist
 ### 1. Captured Unique Device Roster
 A clean hardware inventory map documenting the top-quality profile identity assigned to every individual distinct `MAC Address` spotted over-the-air:
 ```text
-================================================================================
+==========================================================================================
                      CAPTURED UNIQUE DEVICE ROSTER BREAKDOWN                 
-================================================================================
- MAC ADDRESS        | MAC SYSTEM   | RESOLVED IDENTITY MATRIX / PROFILE         
---------------------------------------------------------------------------------
- 00:15:99:A2:BC:11  | Valid/HW     | Smart-TV (Samsung HW Match)                
- 4E:C1:28:9F:54:33  | Randomized   | Smartphone (Apple -> iPhone 15 (100.0%))   
- D2:A4:88:E2:19:0B  | Randomized   | Unknown Device Signature                   
-================================================================================
+==========================================================================================
+ MAC ADDRESS        | ROLE          | MAC SYSTEM   | RESOLVED IDENTITY MATRIX / PROFILE
+------------------------------------------------------------------------------------------
+ 00:15:99:A2:BC:11  | AP-Beacon     | Valid/HW     | Access-Point (Cisco HW Match)
+ 4E:C1:28:9F:54:33  | Client-Probe  | Randomized   | Smartphone (Apple -> iPhone 15 (100.0%))
+ D2:A4:88:E2:19:0B  | AdHoc-Peer    | Randomized   | Mobile-Mesh-Node (RaspberryPi -> Pi-4-B-AdHoc)
+==========================================================================================
 ```
 
 ### 2. Passive Frame Classification Metrics
 A global score tracking system showing how well the capture files map to your trained rules:
 ```text
-================================================================================
+==========================================================================================
                  PASSIVE FRAME CLASSIFICATION PERFORMANCE METRICS             
-================================================================================
- Total Probe Requests Processed : 1245 
- Total Unique MACs Documented  : 42   
---------------------------------------------------------------------------------
+==========================================================================================
+ Total Radio Frames Processed : 1245 
+ Total Unique MACs Documented : 42   
+------------------------------------------------------------------------------------------
  🎯 Definitive Hardware Matches  : 231   (18.6%) [WPS/OUI Verified]
  📊 Probabilistic Model Matches : 712   (57.2%) [Matrix Resolved]
  🛑 Low Confidence (Filtered)   : 54    (4.3%)  [Below Threshold]
  ❓ Completely Untrained Sigs   : 248   (19.9%) [No DB Entry]
---------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
  OVERALL CAPTURE CLASSIFICATION SUCCESS RATE : 75.74%
-================================================================================
+==========================================================================================
 ```
 
 ---
 
 ## 💾 Permanent Embedding
 To make your newly gathered signatures fully portable without managing independent JSON files, copy the contents of your exported `.json` file and paste it directly into the `PORTABLE_KNOWLEDGE_BASE` dictionary block at the top of the `fingerprint_parsers.py` source code.
-
-*   **`fingerprint_engine.py`**: Functions as the user-facing execution core, managing command-line inputs, running training datasets, and simulating streams for live classification.
