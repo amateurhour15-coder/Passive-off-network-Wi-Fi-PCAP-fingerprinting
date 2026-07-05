@@ -1,17 +1,16 @@
-# Passive-off-network-Wi-Fi-PCAP-fingerprinting
-Passive off-network Wi-Fi PCAP fingerprinting
+# Passive Off-Network Wi-Fi PCAP Fingerprint Engine
 
 A lightweight, portable Python engine designed for **Ubuntu 24.04** to passively fingerprint and identify Wi-Fi devices from packet captures (`.pcap`). 
 
-By parsing unencrypted 802.11 Management frames (Probe Requests), this tool extracts unique hardware layer signatures—such as **Information Element (IE) sequences**, **High Throughput (HT) capabilities**, and **Very High Throughput (VHT) capabilities**—to identify specific device types and models even when aggressive MAC address randomisation is active.
+By parsing unencrypted 802.11 Management frames (Probe Requests), this tool extracts unique hardware layer signatures—such as **Information Element (IE) sequences**, **High Throughput (HT) capabilities**, and **Very High Throughput (VHT) capabilities**—to identify specific device manufacturers, types, and models even when aggressive MAC address randomisation is active.
 
 ---
 
 ## Features
 - **Cross-Layer Fingerprinting:** Extracts IE order, HT/VHT chip capabilities, and vendor OUIs.
-- **Multi-Model Tracking:** Links multiple model numbers to a single physical hardware profile over time.
+- **Multi-Model Tracking:** Links multiple model numbers from a specific manufacturer to a single physical hardware profile over time.
 - **Zero-Dependency Portability:** Features an embedded knowledge base inside the script file, alongside dynamic JSON import/export controls.
-- **Dual Engine Modes:** Supports offline signature training and simulated live playback classification.
+- **Dual Engine Modes:** Supports offline signature training (Make, Type, and Model) and simulated live playback classification.
 
 ---
 
@@ -61,28 +60,30 @@ python3 fingerprint_engine.py --play environmental_scan.pcap
 ```
 
 ### 2. Training the Model
-To add a new signature or map an additional model number to an existing hardware profile, feed a clean, isolated sample capture into the training engine:
+To map a new device profile, pass the capture file along with its specific type, manufacturer (make), and model:
 ```bash
 python3 fingerprint_engine.py \
   --train sample_iphone14.pcap \
   --type "Smartphone" \
+  --make "Apple" \
   --model "iPhone 14" \
   --db-export field_signatures.json
 ```
 
 ### 3. Appending Multi-Model Variants Over Time
-If a newer device uses the same internal wireless chipset configuration, train it again with the same `--type` but a different `--model` name. The script automatically appends the model to the existing signature array:
+If a newer device uses the same internal wireless chipset configuration, train it again with the same `--type` and `--make` but a different `--model` name. The script automatically appends the model to the existing signature array:
 ```bash
 python3 fingerprint_engine.py \
   --db-import field_signatures.json \
   --train sample_iphone15.pcap \
   --type "Smartphone" \
+  --make "Apple" \
   --model "iPhone 15" \
   --db-export field_signatures.json
 ```
 
 ### 4. Running Playback with an External Database
-Execute traffic analysis across an entirely custom or transportable ruleset matrix:
+Execute traffic analysis across your accumulated or transported ruleset matrix:
 ```bash
 python3 fingerprint_engine.py \
   --db-import field_signatures.json \
