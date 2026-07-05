@@ -38,7 +38,8 @@ Ensure your system packages are updated and install the required wireless utilit
 
 ```bash
 sudo apt update
-sudo apt install python3-pip python3-scapy wireless-tools iw iwlwifi-guest-tools -y
+sudo apt install python3-pip python3-scapy wireless-tools iw aircrack-ng -y
+
 ```
 
 ---
