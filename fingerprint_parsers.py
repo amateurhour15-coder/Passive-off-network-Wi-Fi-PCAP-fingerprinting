@@ -1,6 +1,10 @@
 import sys
 from scapy.all import Dot11, Dot11ProbeReq, Dot11Elt
 
+# ==============================================================================
+# EMBEDDED PORTABLE DATABASE
+# Default built-in fallback rules. 
+# ==============================================================================
 PORTABLE_KNOWLEDGE_BASE = {
     "IE:[0-1-45-127-191-221]_HT:[2D04]_VHT:[FF010400]_VENDOR_FLAGS:[0017F2010203]": {
         "device_type": "Smartphone",
@@ -22,15 +26,17 @@ COMMON_MAC_OUIS = {
 }
 
 def is_mac_randomized(mac_string):
+    """Checks the local/global bit in the second hex character of the MAC address."""
     if not mac_string or len(mac_string) < 17:
         return True
     return mac_string.upper() in ['2', '6', 'A', 'E']
 
 def parse_wps_attributes(info_payload):
+    """Parses IE 221 Vendor Specific payload looking for WPS Data Elements (OUI 0050F204)."""
     if len(info_payload) < 4:
         return None
     oui = info_payload[:3].hex().upper()
-    oui_type = info_payload
+    oui_type = info_payload[3]
     
     if oui == "0050F2" and oui_type == 4:
         wps_data = info_payload[4:]
@@ -55,6 +61,7 @@ def parse_wps_attributes(info_payload):
     return None
 
 def generate_fingerprint_string(packet):
+    """Extracts structural signatures, deep vendor flags, MAC status, and timing contextual clues."""
     if not packet.haslayer(Dot11ProbeReq):
         return None
     dot11_layer = packet.getlayer(Dot11)
