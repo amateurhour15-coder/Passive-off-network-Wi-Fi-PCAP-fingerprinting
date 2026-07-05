@@ -45,7 +45,7 @@ def calculate_probability_string(model_samples_dict, threshold_pct):
     if total_samples == 0:
         return None
         
-    sorted_models = sorted(model_samples_dict.items(), key=lambda item: item, reverse=True)
+    sorted_models = sorted(model_samples_dict.items(), key=lambda item: item[1], reverse=True)
     prob_strings = []
     
     for model, count in sorted_models:
@@ -90,17 +90,64 @@ def print_metrics_summary(metrics, device_roster):
     print("-" * 90)
     print(f" OVERALL CAPTURE CLASSIFICATION SUCCESS RATE : {success_rate:.2f}%")
     print("="*90 + "\n")
+
 def playback_and_classify(pcap_path, working_db, threshold_pct, quiet_mode):
     """Streams a file line by line to calculate classification metrics and resolve tie-breakers."""
     if not quiet_mode:
         print(f"\n[*] Playback Stream: Classifying with Probability Matrices (Threshold: {threshold_pct}%)")
-        print(f"{'MAC ADDRESS': {distribution}}")
+        print(f"{'MAC ADDRESS':<18} | {'ROLE':<13} | {'MAC SYSTEM':<12} | {'RESOLVED IDENTITY MATRIX / PROFILE':<43} | {'SIGNAL':<8}")
+        print("-" * 100)
+    
+    metrics = {
+        "total_processed": 0,
+        "definitive_matches": 0,
+        "probabilistic_matches": 0,
+        "filtered_matches": 0,
+        "unknown_signatures": 0,
+        "unique_macs": set()
+    }
+    
+    device_roster = {}
+    last_timestamp = None
+    
+    with PcapReader(pcap_path) as pcap_file:
+        for packet in pcap_file:
+            result = generate_fingerprint_string(packet)
+            if result:
+                fp_hash, context = result
+                mac = context.get("mac_address", "Unknown")
+                role = context["network_role"]
+                
+                metrics["total_processed"] += 1
+                metrics["unique_macs"].add(mac)
+                
+                # Calculate IFS (Inter-Frame Spacing)
+                current_timestamp = float(packet.time) if hasattr(packet, 'time') else None
+                ifs = 0
+                if last_timestamp and current_timestamp:
+                    ifs = current_timestamp - last_timestamp
+                last_timestamp = current_timestamp
+                
+                # Check if fingerprint exists in database
+                if fp_hash in working_db:
+                    db_entry = working_db[fp_hash]
+                    
+                    # Check for WPS match (definitive)
+                    if context["wps"] and context["wps"] in db_entry["wps_fingerprints"]:
+                        dev_identity = f"HW Match: {db_entry['make']} {db_entry['device_type']}"
+                        metrics["definitive_matches"] += 1
+                    else:
+                        # Check probabilistic match
+                        distribution = calculate_probability_string(db_entry["model_samples"], threshold_pct)
+                        if distribution:
+                            dev_identity = f"Probabilistic: {db_entry['make']} {distribution}"
                             metrics["probabilistic_matches"] += 1
                         else:
                             dev_identity = "Low Confidence Classification (Filtered)"
                             metrics["filtered_matches"] += 1
                 else:
                     metrics["unknown_signatures"] += 1
+                    dev_identity = "Unknown Device Signature"
                 
                 if mac not in device_roster or device_roster[mac]["identity"] == "Unknown Device Signature":
                     device_roster[mac] = {"role": role, "mac_type": context["mac_type"], "identity": dev_identity}
