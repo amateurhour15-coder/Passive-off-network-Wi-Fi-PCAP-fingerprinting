@@ -255,6 +255,12 @@ def main():
         print(f"[-] Error: PCAP file not found: {args.pcap}")
         sys.exit(1)
     
+    # Prevent overwrite of existing file
+    if os.path.exists(args.output) and not args.append:
+        print(f"[-] Error: Output file already exists: {args.output}")
+        print(f"[*] Use --append flag to add to existing file, or specify a different output file with -o")
+        sys.exit(1)
+    
     extract_training_data(args.pcap, args.min_frames, args.output, args.append)
 
 
