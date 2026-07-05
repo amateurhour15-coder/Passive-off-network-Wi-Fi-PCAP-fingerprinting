@@ -37,18 +37,15 @@ def train_model(pcap_path, device_type, make, model_number, working_db):
     return working_db
 
 def calculate_probability_string(model_samples_dict, threshold_pct):
-    """Generates a sorted string showing distribution probability ratios, dropping elements below threshold."""
     total_samples = sum(model_samples_dict.values())
     if total_samples == 0:
         return None
         
-    sorted_models = sorted(model_samples_dict.items(), key=lambda item: item[1], reverse=True)
-    
+    sorted_models = sorted(model_samples_dict.items(), key=lambda item: item, reverse=True)
     prob_strings = []
+    
     for model, count in sorted_models:
         percentage = (count / total_samples) * 100
-        
-        # Enforce threshold cut-off bounds
         if percentage >= threshold_pct:
             prob_strings.append(f"{model} ({percentage:.1f}%)")
         
@@ -57,14 +54,35 @@ def calculate_probability_string(model_samples_dict, threshold_pct):
         
     return " / ".join(prob_strings)
 
-def playback_and_classify(pcap_path, working_db, threshold_pct):
-    print(f"\n[*] Playback Stream: Classifying with Probability Matrices (Threshold: {threshold_pct}%)")
-    print(f"{'MAC ADDRESS': {distribution})"
+def print_metrics_summary(metrics):
+    """Generates an analytics metrics summary table at the completion of a playback scan."""
+    total = metrics["total_processed"]
+    if total == 0:
+        print("\n[!] Metrics Error: No probe request frames were processed during this session.")
+        return
+
+    definitive_pct = (metrics["definitive_matches"] / total) * 100
+    probabilistic_pct = (metrics["probabilistic_matches"] / total) * 100
+    filtered_pct = (metrics["filtered_matches"] / total) * 100
+    unknown_pct = (metrics["unknown_signatures"] / total) * 100
+    success_rate = ((metrics["definitive_matches"] + metrics["probabilistic_matches"]) / total) * 100
+
+    print("\n" + "="*70)
+    print("               PASSIVE CLASSIFICATION PERFORMANCE METRICS             ")
+    print("="*70)
+    print(f" Total Probe Requests Processed : {total: {distribution})"
+                            metrics["probabilistic_matches"] += 1
                         else:
                             dev_identity = "Low Confidence Classification (Filtered)"
+                            metrics["filtered_matches"] += 1
+                else:
+                    metrics["unknown_signatures"] += 1
                 
                 timing_flag = f" [IFS: {ifs:.2f}s]" if 0 < ifs < 5 else ""
                 print(f"{mac:<18} | {context['mac_type']:<12} | {context['hardware_make']:<15} | {dev_identity+timing_flag:<48} | {context['signal_strength']} dBm")
+
+    # Output dashboard once playback finishes cleanly
+    print_metrics_summary(metrics)
 
 def main():
     parser = argparse.ArgumentParser(description="Probabilistic Context-Aware Wi-Fi Fingerprint Engine")
@@ -75,9 +93,7 @@ def main():
     parser.add_argument("--play", help="Path to target PCAP file for classification.")
     parser.add_argument("--db-import", help="Load external database file.")
     parser.add_argument("--db-export", help="Save current database to external file.")
-    
-    # Boundary threshold option (Defaults to 0.0 - displays everything)
-    parser.add_argument("--threshold", type=float, default=0.0, help="Minimum probability percentage threshold to display a model match (e.g., 10.0).")
+    parser.add_argument("--threshold", type=float, default=0.0, help="Minimum probability percentage threshold (e.g., 10.0).")
     
     args = parser.parse_args()
     working_db = PORTABLE_KNOWLEDGE_BASE.copy()
