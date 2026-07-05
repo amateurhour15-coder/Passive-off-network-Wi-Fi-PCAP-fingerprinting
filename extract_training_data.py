@@ -86,13 +86,10 @@ def extract_training_data(pcap_path, min_frames=5, output_file=None, append=Fals
     
     # Load existing database if appending
     existing_db = {}
-    existing_devices = []
     if append and output_file and os.path.exists(output_file):
         try:
             with open(output_file, 'r') as f:
-                existing_data = json.load(f)
-                existing_db = existing_data.get("training_database", {})
-                existing_devices = existing_data.get("devices", [])
+                existing_db = json.load(f)
             print(f"[+] Loaded existing database with {len(existing_db)} entries")
         except Exception as e:
             print(f"[-] Warning: Could not load existing file: {e}")
@@ -152,27 +149,10 @@ def extract_training_data(pcap_path, min_frames=5, output_file=None, append=Fals
     
     # Build training database
     training_db = dict(existing_db)  # Start with existing data if appending
-    device_summary = list(existing_devices)  # Start with existing devices
     
     for wps_key, device in valid_devices.items():
         device_name = device.get_device_name()
         device_entry = device.to_training_entry()
-        
-        # Check if device already exists
-        device_exists = False
-        for existing_device in device_summary:
-            if (existing_device['make'] == device.wps_make and 
-                existing_device.get('model_number') == device.wps_model_num):
-                # Merge with existing device
-                existing_device['mac_addresses'].extend(device.mac_addresses)
-                existing_device['network_roles'].update(device.network_roles)
-                existing_device['total_frames'] += device.total_frames
-                existing_device['unique_fingerprints'] += device.unique_fingerprints
-                device_exists = True
-                break
-        
-        if not device_exists:
-            device_summary.append(device_entry)
         
         # Add each fingerprint to training database
         for fp_hash, count in device.fingerprints.items():
@@ -195,15 +175,16 @@ def extract_training_data(pcap_path, min_frames=5, output_file=None, append=Fals
     print("\n" + "="*80)
     print("IDENTIFIED DEVICES")
     print("="*80)
-    for i, device in enumerate(device_summary, 1):
-        print(f"\nDevice #{i}:")
-        print(f"  Name: {device['make']} {device['model_number'] or device['model_name']}")
-        print(f"  Type: {device['device_type']}")
-        print(f"  MACs: {', '.join(device['mac_addresses'][:5])}" + 
-              (f" ... ({len(device['mac_addresses'])} total)" if len(device['mac_addresses']) > 5 else ""))
-        print(f"  Roles: {', '.join(device['network_roles'])}")
-        print(f"  Frames: {device['total_frames']}")
-        print(f"  Unique fingerprints: {device['unique_fingerprints']}")
+    for i, (wps_key, device) in enumerate(valid_devices.items(), 1):
+        device_name = device.get_device_name()
+        device_entry = device.to_training_entry()
+        print(f"\nDevice #{i}: {device_name}")
+        print(f"  Type: {device_entry['device_type']}")
+        print(f"  MACs: {', '.join(device.mac_addresses[:5])}" + 
+              (f" ... ({len(device.mac_addresses)} total)" if len(device.mac_addresses) > 5 else ""))
+        print(f"  Roles: {', '.join(device.network_roles)}")
+        print(f"  Frames: {device.total_frames}")
+        print(f"  Unique fingerprints: {len(device.fingerprints)}")
     
     # Handle frames without WPS
     if devices_without_wps:
@@ -213,28 +194,15 @@ def extract_training_data(pcap_path, min_frames=5, output_file=None, append=Fals
     
     # Save to file
     if output_file:
-        output_data = {
-            "metadata": {
-                "source_pcap": os.path.basename(pcap_path),
-                "total_frames": total_frames,
-                "wps_frames": wps_frames,
-                "devices_identified": len(device_summary),
-                "min_frames_threshold": min_frames,
-                "appended": append
-            },
-            "devices": device_summary,
-            "training_database": training_db
-        }
-        
+        # Output just the training database (no metadata or devices array)
         with open(output_file, 'w') as f:
-            json.dump(output_data, f, indent=2)
+            json.dump(training_db, f, indent=4)
         
         action = "Appended to" if append else "Saved to"
         print(f"\n[+] Training data {action}: {output_file}")
         print(f"    Total database entries: {len(training_db)}")
-        print(f"    Total devices: {len(device_summary)}")
     
-    return output_data
+    return training_db
 
 
 def main():
