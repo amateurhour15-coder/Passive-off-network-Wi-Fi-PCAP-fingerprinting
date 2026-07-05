@@ -54,23 +54,18 @@ def calculate_probability_string(model_samples_dict, threshold_pct):
         
     return " / ".join(prob_strings)
 
-def print_metrics_summary(metrics):
-    """Generates an analytics metrics summary table at the completion of a playback scan."""
+def print_metrics_summary(metrics, device_roster):
+    """Generates a complete statistics dashboard and a unique MAC identity roster."""
     total = metrics["total_processed"]
     if total == 0:
         print("\n[!] Metrics Error: No probe request frames were processed during this session.")
         return
 
-    definitive_pct = (metrics["definitive_matches"] / total) * 100
-    probabilistic_pct = (metrics["probabilistic_matches"] / total) * 100
-    filtered_pct = (metrics["filtered_matches"] / total) * 100
-    unknown_pct = (metrics["unknown_signatures"] / total) * 100
-    success_rate = ((metrics["definitive_matches"] + metrics["probabilistic_matches"]) / total) * 100
-
-    print("\n" + "="*70)
-    print("               PASSIVE CLASSIFICATION PERFORMANCE METRICS             ")
-    print("="*70)
-    print(f" Total Probe Requests Processed : {total: {distribution})"
+    # 1. Output the Distinct Unique MAC Address Breakdown Roster
+    print("\n" + "="*80)
+    print("                     CAPTURED UNIQUE DEVICE ROSTER BREAKDOWN                 ")
+    print("="*80)
+    print(f" {'MAC ADDRESS': {distribution})"
                             metrics["probabilistic_matches"] += 1
                         else:
                             dev_identity = "Low Confidence Classification (Filtered)"
@@ -78,11 +73,22 @@ def print_metrics_summary(metrics):
                 else:
                     metrics["unknown_signatures"] += 1
                 
-                timing_flag = f" [IFS: {ifs:.2f}s]" if 0 < ifs < 5 else ""
-                print(f"{mac:<18} | {context['mac_type']:<12} | {context['hardware_make']:<15} | {dev_identity+timing_flag:<48} | {context['signal_strength']} dBm")
+                # Keep tracking the device's highest-quality classification label over time
+                if mac not in device_roster or device_roster[mac]["identity"] == "Unknown Device Signature":
+                    device_roster[mac] = {
+                        "mac_type": context["mac_type"],
+                        "identity": dev_identity
+                    }
+                elif "WPS" in dev_identity or "HW Match" in dev_identity:
+                    # Upgrade tracking if we find a higher confidence definitive marker on a subsequent frame
+                    device_roster[mac]["identity"] = dev_identity
+                
+                if not quiet_mode:
+                    timing_flag = f" [IFS: {ifs:.2f}s]" if 0 < ifs < 5 else ""
+                    print(f"{mac:<18} | {context['mac_type']:<12} | {context['hardware_make']:<15} | {dev_identity+timing_flag:<48} | {context['signal_strength']} dBm")
 
-    # Output dashboard once playback finishes cleanly
-    print_metrics_summary(metrics)
+    # Always generate and print the full consolidated metrics dashboards
+    print_metrics_summary(metrics, device_roster)
 
 def main():
     parser = argparse.ArgumentParser(description="Probabilistic Context-Aware Wi-Fi Fingerprint Engine")
@@ -94,6 +100,9 @@ def main():
     parser.add_argument("--db-import", help="Load external database file.")
     parser.add_argument("--db-export", help="Save current database to external file.")
     parser.add_argument("--threshold", type=float, default=0.0, help="Minimum probability percentage threshold (e.g., 10.0).")
+    
+    # Speed Optimization Flag
+    parser.add_argument("--quiet", action="store_true", help="Silence line-by-line frame logging to maximize parsing speeds.")
     
     args = parser.parse_args()
     working_db = PORTABLE_KNOWLEDGE_BASE.copy()
@@ -108,7 +117,7 @@ def main():
         
     if args.play:
         if not os.path.exists(args.play): print(f"[-] Error: File not found: {args.play}"); sys.exit(1)
-        playback_and_classify(args.play, working_db, args.threshold)
+        playback_and_classify(args.play, working_db, args.threshold, args.quiet)
         
     if args.db_export:
         with open(args.db_export, "w") as f: json.dump(working_db, f, indent=4)
